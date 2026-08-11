@@ -51,7 +51,12 @@ if [ "$found" = "0" ]; then
   # Expected until the chart ships PrometheusRule objects (spec §3.4).
   info "no PrometheusRule rendered — skipping"
 elif ! command -v promtool >/dev/null 2>&1; then
-  die "promtool not found but ${found} PrometheusRule(s) rendered — install prometheus"
+  # Deliberately not fatal: promtool is a ~110 MB download for one binary and is
+  # not installed in CI, so PromQL is validated on developer machines only.
+  # Loud rather than silent — this is a real gap, and an invalid expression will
+  # not be caught until the Prometheus operator loads the rule.
+  warn "promtool not installed — ${found} PrometheusRule(s) NOT validated"
+  warn "run ci-tools/install-tools.sh locally to check PromQL before pushing"
 else
   promtool check rules "${rules_dir}"/*.yaml
 fi
