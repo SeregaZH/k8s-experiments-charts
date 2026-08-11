@@ -1,0 +1,15 @@
+# CI values profile: dashboards organised into a Grafana folder.
+#
+# Exercises the annotation path that the default profile leaves off, so a
+# regression in the folder logic fails rendering rather than surfacing as
+# dashboards quietly landing in General. Picked up automatically by
+# ci-tools/render-chart.sh (any charts/<name>/ci/*-values.yaml).
+dashboards:
+  folder: k8s-experiments
+  extraLabels:
+    dashboard-source: k8s-experiments-charts
+
+commonLabels:
+  team: platform
+commonAnnotations:
+  example.com/owner: platform-team

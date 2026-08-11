@@ -1,0 +1,137 @@
+suite: prometheus rules
+templates:
+  - prometheusrule.yaml
+release:
+  name: mon
+  namespace: monitoring
+tests:
+  - it: renders a single PrometheusRule
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PrometheusRule
+      - equal:
+          path: apiVersion
+          value: monitoring.coreos.com/v1
+
+  - it: renders nothing when rules are disabled
+    set:
+      rules.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: separates recording rules from alerting rules
+    asserts:
+      - equal:
+          path: spec.groups[0].name
+          value: monitoring-extensions.recording
+      - equal:
+          path: spec.groups[1].name
+          value: monitoring-extensions.alerts
+
+  - it: names the recorded series by the level:metric:operations convention
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].record
+          value: k8se_namespace_pod:container_memory_working_set_bytes:ratio_limit
+
+  # Routing keys off severity, so an alert without it is unroutable (spec 3.4).
+  - it: labels every alert with a severity
+    asserts:
+      - equal:
+          path: spec.groups[1].rules[0].labels.severity
+          value: warning
+
+  - it: honours a configured severity
+    set:
+      rules.alerts.podMemoryNearLimit.severity: critical
+    asserts:
+      - equal:
+          path: spec.groups[1].rules[0].labels.severity
+          value: critical
+
+  - it: carries summary and description annotations
+    asserts:
+      - exists:
+          path: spec.groups[1].rules[0].annotations.summary
+      - exists:
+          path: spec.groups[1].rules[0].annotations.description
+
+  # A rule without `for` alerts on a single scrape blip (spec 3.4).
+  - it: sets a non-trivial for duration
+    asserts:
+      - equal:
+          path: spec.groups[1].rules[0].for
+          value: 15m
+
+  - it: templates the threshold into the alert expression
+    set:
+      rules.alerts.podMemoryNearLimit.threshold: 0.75
+    asserts:
+      - matchRegex:
+          path: spec.groups[1].rules[0].expr
+          pattern: "> 0.75$"
+
+  - it: alerts off the recorded series rather than repeating the join
+    asserts:
+      - matchRegex:
+          path: spec.groups[1].rules[0].expr
+          pattern: "^k8se_namespace_pod:container_memory_working_set_bytes:ratio_limit"
+
+  - it: omits runbook_url when none is configured
+    asserts:
+      - isNull:
+          path: spec.groups[1].rules[0].annotations.runbook_url
+
+  - it: includes runbook_url when configured
+    set:
+      rules.alerts.podMemoryNearLimit.runbookUrl: https://example.com/runbook
+    asserts:
+      - equal:
+          path: spec.groups[1].rules[0].annotations.runbook_url
+          value: https://example.com/runbook
+
+  - it: applies additional rule labels for routing
+    set:
+      rules.additionalRuleLabels.team: platform
+    asserts:
+      - equal:
+          path: spec.groups[1].rules[0].labels.team
+          value: platform
+
+  - it: omits the group interval by default
+    asserts:
+      - isNull:
+          path: spec.groups[0].interval
+
+  - it: sets the group interval when configured
+    set:
+      rules.interval: 60s
+    asserts:
+      - equal:
+          path: spec.groups[0].interval
+          value: 60s
+
+  - it: drops the recording group when the recording rule is disabled
+    set:
+      rules.recording.podMemoryRatio.enabled: false
+    asserts:
+      - equal:
+          path: spec.groups[0].name
+          value: monitoring-extensions.alerts
+      - lengthEqual:
+          path: spec.groups
+          count: 1
+
+  - it: drops the alert group when the alert is disabled
+    set:
+      rules.alerts.podMemoryNearLimit.enabled: false
+    asserts:
+      - lengthEqual:
+          path: spec.groups
+          count: 1
+      - equal:
+          path: spec.groups[0].name
+          value: monitoring-extensions.recording

@@ -1,0 +1,8 @@
+.DS_Store
+.git/
+.gitignore
+*.tmproj
+.idea/
+.vscode/
+# helm-unittest suites are not part of the packaged artifact
+tests/

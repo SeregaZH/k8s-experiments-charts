@@ -1,0 +1,95 @@
+suite: grafana dashboards
+templates:
+  - dashboards-configmap.yaml
+release:
+  name: mon
+  namespace: monitoring
+tests:
+  - it: renders one ConfigMap per file in dashboards/
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ConfigMap
+
+  # The discovery contract. If this label/value pair is wrong the ConfigMap is
+  # applied successfully and then silently never read — the worst failure mode
+  # this chart has, so it is asserted explicitly (spec 3.1).
+  - it: carries the sidecar discovery label with the upstream default value
+    asserts:
+      - equal:
+          path: metadata.labels["grafana_dashboard"]
+          value: "1"
+
+  - it: honours a customised sidecar label and value
+    set:
+      dashboards.label: my_dashboard
+      dashboards.labelValue: "true"
+    asserts:
+      - equal:
+          path: metadata.labels["my_dashboard"]
+          value: "true"
+      - isNull:
+          path: metadata.labels["grafana_dashboard"]
+
+  - it: names the data key after the source file so the sidecar writes a .json
+    asserts:
+      - exists:
+          path: data["app-workloads.json"]
+
+  - it: defaults to the release namespace
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+
+  - it: never assumes the monitoring namespace
+    set:
+      namespaceOverride: observability
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: observability
+
+  - it: sets no folder annotation by default
+    asserts:
+      - isNull:
+          path: metadata.annotations
+
+  - it: sets the folder annotation when a folder is configured
+    set:
+      dashboards.folder: k8s-experiments
+    asserts:
+      - equal:
+          path: metadata.annotations["grafana_folder"]
+          value: k8s-experiments
+
+  - it: honours a customised folder annotation key
+    set:
+      dashboards.folder: k8s-experiments
+      dashboards.folderAnnotation: custom_folder
+    asserts:
+      - equal:
+          path: metadata.annotations["custom_folder"]
+          value: k8s-experiments
+
+  - it: renders nothing when dashboards are disabled
+    set:
+      dashboards.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: applies common labels to every object
+    set:
+      commonLabels.team: platform
+    asserts:
+      - equal:
+          path: metadata.labels["team"]
+          value: platform
+
+  - it: marks objects as part of the upstream stack
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/part-of"]
+          value: kube-prometheus-stack

@@ -1,0 +1,42 @@
+{{- /*
+One ConfigMap per file matched by `dashboards/*.json`, so adding a dashboard is
+dropping a file in a folder — no template edit (spec §3.1, §4.3).
+
+Deliberately NOT the Grafana subchart's `dashboards:`/`dashboardProviders:`
+values, which fetch from grafana.com at install time: a network dependency on an
+unpinned third-party artifact, with no review of what changed (spec §6).
+*/ -}}
+{{- if .Values.dashboards.enabled -}}
+{{- $root := . -}}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+{{- $slug := include "monitoring-extensions.dashboardName" $path }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-%s" (include "monitoring-extensions.fullname" $root) $slug | trunc 63 | trimSuffix "-" }}
+  namespace: {{ include "monitoring-extensions.namespace" $root }}
+  labels:
+    {{- include "monitoring-extensions.labels" $root | nindent 4 }}
+    {{- /* The sidecar discovery contract. Without this exact label/value pair
+           the ConfigMap is inert — it is applied and simply never read. */}}
+    {{ $root.Values.dashboards.label }}: {{ $root.Values.dashboards.labelValue | quote }}
+    {{- with $root.Values.dashboards.extraLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if or $root.Values.dashboards.folder $root.Values.commonAnnotations }}
+  annotations:
+    {{- if $root.Values.dashboards.folder }}
+    {{- /* No-op unless the upstream release also sets folderAnnotation AND
+           provider.foldersFromFilesStructure (spec §3.5). */}}
+    {{ $root.Values.dashboards.folderAnnotation }}: {{ $root.Values.dashboards.folder | quote }}
+    {{- end }}
+    {{- with $root.Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+data:
+  {{ base $path }}: |-
+{{ $bytes | toString | indent 4 }}
+{{- end }}
+{{- end }}

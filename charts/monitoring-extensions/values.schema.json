@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "monitoring-extensions values",
+  "description": "Turns a typo into a render-time error rather than a silently ignored key (spec 5.2).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "nameOverride": { "type": "string" },
+    "fullnameOverride": { "type": "string" },
+    "namespaceOverride": {
+      "type": "string",
+      "description": "Empty means the release namespace. Never hardcode 'monitoring' (spec 5.3)."
+    },
+    "commonLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+    "commonAnnotations": { "type": "object", "additionalProperties": { "type": "string" } },
+    "dashboards": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Must match grafana.sidecar.dashboards.label upstream, or the ConfigMap is never read."
+        },
+        "labelValue": {
+          "type": "string",
+          "description": "Must match grafana.sidecar.dashboards.labelValue upstream. Quoted: the default is the string \"1\", not the number 1."
+        },
+        "folderAnnotation": { "type": "string", "minLength": 1 },
+        "folder": {
+          "type": "string",
+          "description": "No-op unless the upstream release also sets folderAnnotation AND provider.foldersFromFilesStructure (spec 3.5)."
+        },
+        "extraLabels": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "required": ["enabled", "label", "labelValue"]
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "additionalRuleLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "interval": {
+          "type": "string",
+          "description": "Rule group evaluation interval, e.g. 30s. Empty means the Prometheus global default.",
+          "pattern": "^([0-9]+(ms|s|m|h|d|w|y))*$"
+        },
+        "recording": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "podMemoryRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "enabled": { "type": "boolean" } },
+              "required": ["enabled"]
+            }
+          }
+        },
+        "alerts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "podMemoryNearLimit": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "threshold": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1,
+                  "description": "Fraction of the container memory limit, so 0.9 is 90%."
+                },
+                "for": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ms|s|m|h|d|w|y)$",
+                  "description": "A rule without a generous `for` alerts on a single scrape blip."
+                },
+                "severity": { "type": "string", "enum": ["critical", "warning", "info"] },
+                "runbookUrl": { "type": "string" }
+              },
+              "required": ["enabled", "threshold", "for", "severity"]
+            }
+          }
+        }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": ["dashboards", "rules"]
+}

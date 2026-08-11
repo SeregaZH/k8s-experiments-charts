@@ -1,0 +1,66 @@
+name: charts-ci
+
+# Pull-request validation only. This workflow NEVER tags and NEVER publishes —
+# that is charts-publish, which runs on merge to main (spec §4.1).
+#
+# All logic lives in ci-tools/ so the exact same checks run on a laptop:
+#   ci-tools/install-tools.sh && ci-tools/validate-chart.sh <chart>
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - "ci-tools/**"
+      - ".github/workflows/charts-ci.yml"
+  # Manual run, to validate main or a branch without opening a pull request.
+  # Safe to expose: this workflow only reads, so a dispatch cannot publish.
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: "Single chart to validate (blank = all charts)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v3.20.2
+  KUBECONFORM_VERSION: v0.6.7
+
+jobs:
+  discover:
+    name: discover charts
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.find.outputs.charts }}
+      any: ${{ steps.find.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: find
+        run: ./ci-tools/discover-charts.sh "${{ inputs.chart }}"
+
+  validate:
+    name: validate ${{ matrix.chart }}
+    needs: discover
+    if: needs.discover.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.discover.outputs.charts) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install validation tools
+        run: ./ci-tools/install-tools.sh
+
+      # helm lint, helm template across every values profile, kubeconform,
+      # dashboard JSON rules, promtool, helm-unittest (spec §5.2).
+      - name: Validate chart
+        run: ./ci-tools/validate-chart.sh "${{ matrix.chart }}"

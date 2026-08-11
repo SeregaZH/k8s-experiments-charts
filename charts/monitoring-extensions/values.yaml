@@ -1,0 +1,80 @@
+# Default values for monitoring-extensions.
+#
+# This chart is additive: it ships only ConfigMaps consumed by the Grafana
+# dashboard sidecar of an existing kube-prometheus-stack release. Deleting the
+# release leaves that stack fully functional (spec §1).
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace for the rendered objects. Empty means the release namespace.
+# Never hardcode `monitoring` — it is a value, so the chart stays portable to
+# clusters that install the stack elsewhere (spec §5.3).
+namespaceOverride: ""
+
+# Extra labels/annotations applied to every object this chart renders.
+commonLabels: {}
+commonAnnotations: {}
+
+dashboards:
+  # Toggleable independently of alerting and rules, because `dev` uses Azure
+  # Monitor managed Prometheus and can take dashboards without an in-cluster
+  # Alertmanager (spec §5.3).
+  enabled: true
+
+  # The label the Grafana sidecar watches. These are the kube-prometheus-stack
+  # 87.16.1 defaults, verified in spec §3.1 — a ConfigMap carrying them is picked
+  # up with no change to the upstream release. Override only if the upstream
+  # `grafana.sidecar.dashboards.label`/`labelValue` were customised.
+  label: grafana_dashboard
+  labelValue: "1"
+
+  # Folder organisation is OPT-IN and needs upstream values set as well:
+  # `grafana.sidecar.dashboards.folderAnnotation: grafana_folder` AND
+  # `grafana.sidecar.dashboards.provider.foldersFromFilesStructure: true`.
+  # Both are required together; either alone is a no-op, and this annotation on
+  # its own does nothing (spec §3.1, §3.5). Leave `folder` empty to let every
+  # dashboard land in Grafana's General folder.
+  folderAnnotation: grafana_folder
+  folder: ""
+
+  # Added to each dashboard ConfigMap. Useful for `kubectl get cm -l ...` and for
+  # telling this chart's dashboards apart from any other source.
+  extraLabels: {}
+
+rules:
+  # Toggleable independently of dashboards (spec §5.3).
+  enabled: true
+
+  # No labels are needed for Prometheus to select these: the current release
+  # sets ruleSelectorNilUsesHelmValues=false, which leaves ruleSelector and
+  # ruleNamespaceSelector empty — i.e. every PrometheusRule in every namespace
+  # is discovered (spec §3.4, verified against the live Prometheus CR).
+  additionalRuleLabels: {}
+
+  # Rule group evaluation interval. Empty means Prometheus' global default.
+  # Must not be shorter than the scrape interval.
+  interval: ""
+
+  recording:
+    # Precomputes memory-used-vs-limit per pod. Worth recording rather than
+    # repeating: the join is comparatively expensive, the alert below and the
+    # Workloads dashboard both want it, and a recorded series keeps the alert
+    # expression short enough to read.
+    podMemoryRatio:
+      enabled: true
+
+  alerts:
+    # Workload-level, deliberately: upstream already ships ~100 rules for
+    # cluster and node conditions, and duplicating them is noise (spec §3.4).
+    podMemoryNearLimit:
+      enabled: true
+      # Fraction of the container memory limit. Thresholds are values, not
+      # hardcoded, so a cluster can tune without forking the chart (spec §2.4).
+      threshold: 0.9
+      # Generous on purpose — a rule without `for` alerts on a single scrape
+      # blip. Working set is spiky; 15m ignores transient garbage-collection
+      # peaks and still leaves room to act before an OOMKill.
+      for: 15m
+      severity: warning
+      runbookUrl: ""
