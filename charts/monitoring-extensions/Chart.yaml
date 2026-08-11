@@ -1,0 +1,26 @@
+apiVersion: v2
+name: monitoring-extensions
+description: Custom Grafana dashboards and Alertmanager configuration layered on top of an existing kube-prometheus-stack release.
+type: application
+
+# Written by CI from the git tag `monitoring-extensions-x.y.z` on merge to main
+# (spec §2.3). The tag is the source of truth; do not bump this by hand.
+version: 0.0.0
+
+# The chart ships no image, so appVersion is meaningless here (spec §2.3).
+appVersion: "0"
+
+# No dependencies, deliberately. This is a companion chart, not an umbrella:
+# kube-prometheus-stack stays a plain upstream release that can be bumped on its
+# own schedule (spec §6). No dependencies also means no lockfile to drift.
+
+home: https://github.com/SeregaZH/k8s-experiments-charts
+sources:
+  - https://github.com/SeregaZH/k8s-experiments-charts
+keywords:
+  - grafana
+  - dashboards
+  - monitoring
+  - kube-prometheus-stack
+maintainers:
+  - name: SeregaZH

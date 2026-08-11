@@ -1,0 +1,77 @@
+{{- /*
+Custom alert and recording rules (spec §3.4).
+
+AlertmanagerConfig routes alerts; it does not create them. These are the alerts
+themselves, and they are useful on their own: they show up in Prometheus and in
+Alertmanager's UI with no routing configured. Delivery (receivers, routes) is
+spec §3.3 and is not implemented yet.
+
+No selector labels are required — the current release leaves ruleSelector and
+ruleNamespaceSelector empty, so every PrometheusRule is discovered cluster-wide.
+*/ -}}
+{{- if .Values.rules.enabled -}}
+{{- $r := .Values.rules -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "monitoring-extensions.fullname" . }}
+  namespace: {{ include "monitoring-extensions.namespace" . }}
+  labels:
+    {{- include "monitoring-extensions.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  groups:
+    {{- if $r.recording.podMemoryRatio.enabled }}
+    - name: monitoring-extensions.recording
+      {{- with $r.interval }}
+      interval: {{ . }}
+      {{- end }}
+      rules:
+        {{- /* Naming follows the Prometheus convention level:metric:operations,
+               with a k8se_ prefix so custom series are obvious next to the
+               upstream ones. */}}
+        - record: k8se_namespace_pod:container_memory_working_set_bytes:ratio_limit
+          expr: |-
+            sum by (namespace, pod) (
+              container_memory_working_set_bytes{container!="", container!="POD"}
+            )
+            /
+            sum by (namespace, pod) (
+              kube_pod_container_resource_limits{resource="memory"}
+            )
+    {{- end }}
+
+    {{- if $r.alerts.podMemoryNearLimit.enabled }}
+    {{- $a := $r.alerts.podMemoryNearLimit }}
+    - name: monitoring-extensions.alerts
+      {{- with $r.interval }}
+      interval: {{ . }}
+      {{- end }}
+      rules:
+        - alert: K8sePodMemoryNearLimit
+          {{- /* Reads the recorded series rather than repeating the join.
+                 Pods with no memory limit produce no series at all, so they
+                 cannot trigger this — that is intentional, an unlimited pod
+                 has no limit to approach. */}}
+          expr: k8se_namespace_pod:container_memory_working_set_bytes:ratio_limit > {{ $a.threshold }}
+          for: {{ $a.for }}
+          labels:
+            severity: {{ $a.severity }}
+            {{- with $r.additionalRuleLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: Pod is close to its memory limit.
+            description: >-
+              Pod {{ "{{ $labels.namespace }}/{{ $labels.pod }}" }} has used
+              {{ "{{ $value | humanizePercentage }}" }} of its memory limit for more than {{ $a.for }}.
+              Working set is what the kernel counts against the limit, so this pod is a
+              candidate for OOMKill.
+            {{- with $a.runbookUrl }}
+            runbook_url: {{ . | quote }}
+            {{- end }}
+    {{- end }}
+{{- end }}

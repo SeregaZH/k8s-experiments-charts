@@ -1,0 +1,82 @@
+name: charts-publish
+
+# Runs only when a pull request has been merged into main (push to main).
+# Pull-request validation lives in charts-ci and never tags or publishes
+# (spec §4.1).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - "ci-tools/**"
+      - ".github/workflows/charts-publish.yml"
+  # Manual run, for re-publishing a chart or rehearsing with dry_run.
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: "Chart to publish (blank = charts changed in the last commit)"
+        required: false
+        type: string
+      bump:
+        description: "Version bump level"
+        required: false
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      dry_run:
+        description: "Package only — do not push or tag"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write # required to push the <chart>-x.y.z tags
+  packages: write # required to push OCI artifacts to ghcr.io
+
+env:
+  HELM_VERSION: v3.20.2
+  OCI_REGISTRY: oci://ghcr.io/seregazh/charts
+
+jobs:
+  publish:
+    name: version, publish and tag changed charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags, needed to read the latest chart tag
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Select charts to publish
+        id: changed
+        run: ./ci-tools/select-charts.sh "${{ inputs.chart }}" "${{ github.event.before }}" "${{ github.sha }}"
+
+      - name: Install validation tools
+        if: steps.changed.outputs.any == 'true'
+        run: ./ci-tools/install-tools.sh
+
+      # Re-run the full gate before publishing. charts-ci already ran it on the
+      # pull request, but main can move between approval and merge.
+      - name: Validate before publishing
+        if: steps.changed.outputs.any == 'true'
+        env:
+          CHARTS: ${{ steps.changed.outputs.charts }}
+        run: ./ci-tools/validate-charts.sh $CHARTS
+
+      - name: Publish
+        if: steps.changed.outputs.any == 'true'
+        env:
+          CHARTS: ${{ steps.changed.outputs.charts }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUMP: ${{ inputs.bump }}
+          # Empty on push (a real merge), so merges publish for real.
+          DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
+        run: ./ci-tools/publish-charts.sh $CHARTS
+
+      - name: Nothing to do
+        if: steps.changed.outputs.any != 'true'
+        run: echo "No chart directories changed in this push."
