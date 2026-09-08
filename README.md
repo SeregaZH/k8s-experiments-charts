@@ -6,7 +6,8 @@ A **monorepo of Helm charts**: one folder → one chart → one published OCI ar
 cluster configuration and no Flux resources — it *publishes* charts; the sibling repo
 `k8s-workload-deploy` *consumes* them.
 
-Design is specified before implementation. See [`spec/specification.md`](spec/specification.md).
+Design is specified before implementation. Each chart carries its own specification beside it — see
+[`charts/monitoring-extensions/spec/specification.md`](charts/monitoring-extensions/spec/specification.md).
 
 ## Charts
 
@@ -16,28 +17,49 @@ Design is specified before implementation. See [`spec/specification.md`](spec/sp
 
 ## Local development
 
-CI logic lives in [`ci-tools/`](ci-tools/) as ordinary scripts, not inline workflow steps, so the
-exact checks a pull request runs also run on a laptop:
+CI logic lives in the shared [`ci-tools`](https://github.com/SeregaZH/ci-tools)
+submodule as ordinary scripts, not inline workflow steps, so the exact checks a
+pull request runs also run on a laptop. Once per clone:
 
 ```bash
-./ci-tools/install-tools.sh                            # kubeconform + helm-unittest, pinned versions
-./ci-tools/validate-chart.sh monitoring-extensions     # the whole charts-ci gate
-./ci-tools/validate-charts.sh                          # every chart
+git submodule update --init
 ```
+
+then:
+
+```bash
+./ci-tools/monorepo/install-tools.sh                            # kubeconform + helm-unittest, pinned versions
+./ci-tools/monorepo/validate-chart.sh monitoring-extensions     # the whole charts-ci gate
+./ci-tools/monorepo/validate-charts.sh                          # every chart
+```
+
+Everything this repo has to say about itself — registry, tag scheme, tool
+versions — is in [`.ci-tools.env`](.ci-tools.env), which the scripts source
+themselves. Nothing is repeated in the workflows.
 
 | Script | Does |
 |---|---|
-| `install-tools.sh` | Installs the pinned toolchain. Idempotent. |
-| `discover-charts.sh` | Lists charts as JSON, for the CI matrix. |
-| `select-charts.sh` | Chooses charts to publish: explicit name, else changed set. Space-separated. |
-| `detect-changed-charts.sh` | Charts touched between two commits. |
-| `render-chart.sh` | Renders every values profile (`values.yaml` + `ci/*-values.yaml`). |
-| `validate-chart.sh` | lint → render → kubeconform → dashboards → promtool → unittest. |
-| `validate-charts.sh` | `validate-chart.sh` over several charts. |
-| `validate-dashboards.sh` | Dashboard authoring rules 1–3 (spec §3.2). |
-| `extract-rule-groups.py` | Lifts rule groups out of `PrometheusRule` CRs for promtool. |
-| `next-version.sh` | Next SemVer from this chart's own tags. |
-| `publish-charts.sh` | Version → package → push OCI → tag. Honours `DRY_RUN=1`. |
+| `ci-tools/monorepo/install-tools.sh` | Installs the pinned toolchain. Idempotent. |
+| `ci-tools/monorepo/discover-charts.sh` | Lists charts as JSON, for the CI matrix. |
+| `ci-tools/monorepo/select-charts.sh` | Chooses charts to publish: explicit name, else changed set. Space-separated. |
+| `ci-tools/monorepo/detect-changed-charts.sh` | Charts touched between two commits. |
+| `ci-tools/monorepo/render-chart.sh` | Renders every values profile (`values.yaml` + `ci/*-values.yaml`). |
+| `ci-tools/monorepo/validate-chart.sh` | lint → render → kubeconform → promtool → unittest → `ci/checks/`. |
+| `ci-tools/monorepo/validate-charts.sh` | `validate-chart.sh` over several charts. |
+| `ci-tools/monorepo/extract-rule-groups.py` | Lifts rule groups out of `PrometheusRule` CRs for promtool. |
+| `ci-tools/monorepo/next_version.py` | Next SemVer from this chart's own tags. |
+| `ci-tools/monorepo/publish-charts.sh` | Version → package → push OCI → tag. Honours `DRY_RUN=1`. |
+| `ci/checks/validate-dashboards.sh` | **This repo's own.** Dashboard authoring rules 1–3 (spec §3.2). |
+
+`ci/checks/` is the extension point: `validate-chart.sh` runs every executable
+in it with the chart directory, so a rule that is this repository's business
+stays here instead of leaking into the shared repo.
+
+To bump the pinned ci-tools:
+
+```bash
+git submodule update --remote ci-tools && git commit ci-tools -m "Bump ci-tools"
+```
 
 ## Publication flow
 

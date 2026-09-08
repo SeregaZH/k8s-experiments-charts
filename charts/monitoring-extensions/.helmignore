@@ -6,3 +6,7 @@
 .vscode/
 # helm-unittest suites are not part of the packaged artifact
 tests/
+# nor is the design document — it governs the chart, it does not ship with it
+spec/
+# nor the CI-only values profiles
+ci/

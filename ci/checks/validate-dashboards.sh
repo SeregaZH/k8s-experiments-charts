@@ -6,11 +6,16 @@
 #   2. uid set and unique       — it is the permalink
 #   3. no hardcoded datasource  — a foreign uid renders every panel as an error
 #
-#   ci-tools/validate-dashboards.sh [chart-dir ...]
+#   ci/checks/validate-dashboards.sh [chart-dir ...]
 #
 # Defaults to every chart under charts/ that has a dashboards/ directory.
 # Duplicate uids are detected across all charts checked in one run.
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+#
+# This lives here rather than in the shared ci-tools submodule because the rules
+# and the k8se- uid convention are this repository's, not every repository's.
+# ci-tools/monorepo/validate-chart.sh runs every executable in ci/checks/ with
+# the chart directory, so it is part of the gate without ci-tools knowing it.
+source "$(dirname "${BASH_SOURCE[0]}")/../../ci-tools/monorepo/lib.sh"
 
 require_cmd jq
 

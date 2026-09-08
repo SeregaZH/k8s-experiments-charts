@@ -5,7 +5,7 @@ Custom Grafana dashboards layered on top of an **existing** `kube-prometheus-sta
 This is a **companion chart, not an umbrella chart** — it declares no dependency on
 `kube-prometheus-stack` and is deployed as a second `HelmRelease` gated on the first. Upstream stays
 a plain upstream release that can be bumped on its own schedule, and deleting this release leaves
-that stack fully functional. See [`spec/specification.md`](../../spec/specification.md) §6.
+that stack fully functional. See [`spec/specification.md`](spec/specification.md) §6.
 
 The chart owns no Deployment, Service, PVC, or workload of any kind. It ships ConfigMaps that an
 already-running Grafana sidecar reads.
@@ -23,7 +23,7 @@ watches. **Adding a dashboard is dropping a file in that folder** — no templat
 ### Authoring rules (spec §3.2)
 
 Dashboards exported from the Grafana UI are **not** directly usable. Rules 1–3 are enforced
-mechanically by `hack/validate-dashboards.sh`:
+mechanically by `ci-tools/validate-dashboards.sh`:
 
 | # | Rule | Why |
 |---|---|---|

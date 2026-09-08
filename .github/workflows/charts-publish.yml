@@ -8,7 +8,8 @@ on:
     branches: [main]
     paths:
       - "charts/**"
-      - "ci-tools/**"
+      - "ci-tools"          # the submodule pointer, not a directory of files
+      - ".ci-tools.env"
       - ".github/workflows/charts-publish.yml"
   # Manual run, for re-publishing a chart or rehearsing with dry_run.
   workflow_dispatch:
@@ -34,8 +35,10 @@ permissions:
   packages: write # required to push OCI artifacts to ghcr.io
 
 env:
-  HELM_VERSION: v3.20.2
-  OCI_REGISTRY: oci://ghcr.io/seregazh/charts
+  HELM_VERSION: v3.20.2   # consumed by azure/setup-helm
+
+# OCI_REGISTRY, the tag scheme and the pinned tool versions are in
+# .ci-tools.env at the root, which the ci-tools scripts source themselves.
 
 jobs:
   publish:
@@ -45,6 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # full history and tags, needed to read the latest chart tag
+          submodules: true # ci-tools
 
       - uses: azure/setup-helm@v4
         with:
@@ -52,11 +56,11 @@ jobs:
 
       - name: Select charts to publish
         id: changed
-        run: ./ci-tools/select-charts.sh "${{ inputs.chart }}" "${{ github.event.before }}" "${{ github.sha }}"
+        run: ./ci-tools/monorepo/select-charts.sh "${{ inputs.chart }}" "${{ github.event.before }}" "${{ github.sha }}"
 
       - name: Install validation tools
         if: steps.changed.outputs.any == 'true'
-        run: ./ci-tools/install-tools.sh
+        run: ./ci-tools/monorepo/install-tools.sh
 
       # Re-run the full gate before publishing. charts-ci already ran it on the
       # pull request, but main can move between approval and merge.
@@ -64,7 +68,7 @@ jobs:
         if: steps.changed.outputs.any == 'true'
         env:
           CHARTS: ${{ steps.changed.outputs.charts }}
-        run: ./ci-tools/validate-charts.sh $CHARTS
+        run: ./ci-tools/monorepo/validate-charts.sh $CHARTS
 
       - name: Publish
         if: steps.changed.outputs.any == 'true'
@@ -75,7 +79,7 @@ jobs:
           BUMP: ${{ inputs.bump }}
           # Empty on push (a real merge), so merges publish for real.
           DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
-        run: ./ci-tools/publish-charts.sh $CHARTS
+        run: ./ci-tools/monorepo/publish-charts.sh $CHARTS
 
       - name: Nothing to do
         if: steps.changed.outputs.any != 'true'
