@@ -1,11 +1,23 @@
-# k8s-experiments-charts — Specification
+# monitoring-extensions — Specification
 
 Status: **Draft v0.1** · Scope: **`home-cluster` monitoring extensions only**
 
-This document is the source-of-truth specification for the `k8s-experiments-charts` repository.
+This document is the source-of-truth specification for the **`monitoring-extensions`** chart. It
+lives beside the chart it describes, so the design and the code it governs move together.
 We follow **spec-driven development**: the specification is authored and agreed **before** the chart
 code is written. Implementation tasks trace back to sections of this document; design changes are
 made here first, then in code.
+
+> **Section numbers are load-bearing.** Roughly fifty comments across this chart, the `ci-tools/`
+> scripts, and the consuming `k8s-workload-deploy` repo cite sections of this document by number
+> (`spec §3.1`, `charts spec §3.3.1`, …). Renumbering silently invalidates all of them, so add
+> subsections rather than resequencing existing ones.
+
+> **Some sections here are repo-wide, not chart-specific.** §2.2 (repository structure), §2.3
+> (naming and versioning), §4.1 (chart publication flow) and §5.2 (the CI gate) describe conventions
+> that apply to *every* chart in this monorepo, and are documented here only because
+> `monitoring-extensions` is currently the only one. They should be lifted into a repo-level
+> specification when a second chart is added.
 
 It describes how **custom Grafana dashboards** and **Alertmanager configuration** are packaged as a
 Helm chart and layered on top of the upstream `kube-prometheus-stack` release that already runs on
@@ -103,33 +115,54 @@ flowchart LR
 
 ## 2.2 Repository structure
 
-One folder → one chart → one published OCI artifact.
+One folder → one chart → one published OCI artifact. Each chart owns its own specification, so the
+design document and the code it governs move together.
 
 ```
 k8s-experiments-charts/
 ├── README.md
 ├── LICENSE
-├── spec/
-│   └── specification.md            # this document
 ├── charts/
 │   └── monitoring-extensions/
-│       ├── Chart.yaml              # no dependencies — see §6
+│       ├── spec/
+│       │   └── specification.md    # this document
+│       ├── Chart.yaml              # no dependencies — see §6; version 0.0.0, CI writes the real one
 │       ├── values.yaml
-│       ├── README.md               # generated values table
+│       ├── values.schema.json      # typo -> render error, not a silently ignored key
+│       ├── README.md               # values table
+│       ├── .helmignore             # keeps spec/, tests/, ci/ out of the artifact
 │       ├── dashboards/             # raw .json, one file per dashboard
 │       │   └── *.json
 │       ├── templates/
 │       │   ├── dashboards-configmap.yaml
-│       │   ├── alertmanagerconfig.yaml
+│       │   ├── alertmanagerconfig.yaml   # not implemented yet — §3.3
 │       │   ├── prometheusrule.yaml
 │       │   └── _helpers.tpl
+│       ├── ci/                     # extra values profiles CI renders — §5.2
+│       │   └── *-values.yaml
 │       └── tests/                  # helm-unittest suites
 │           └── *_test.yaml
+├── ci-tools/                       # the CI gate as ordinary scripts, runnable locally
+│   ├── lib.sh
+│   ├── install-tools.sh
+│   ├── discover-charts.sh          # -> JSON, for the Actions matrix
+│   ├── select-charts.sh            # -> space-separated, for publishing
+│   ├── detect-changed-charts.sh
+│   ├── render-chart.sh
+│   ├── validate-chart.sh           # lint -> render -> kubeconform -> dashboards -> promtool -> unittest
+│   ├── validate-charts.sh
+│   ├── validate-dashboards.sh
+│   ├── extract-rule-groups.py
+│   ├── next-version.sh
+│   └── publish-charts.sh
 └── .github/
     └── workflows/
         ├── charts-ci.yml           # pull request: build + test only
         └── charts-publish.yml      # merge to main: tag + push OCI
 ```
+
+Workflow steps are thin wrappers that call `ci-tools/` scripts rather than embedding shell, so the
+identical checks run on a developer machine.
 
 ## 2.3 Naming and versioning
 
