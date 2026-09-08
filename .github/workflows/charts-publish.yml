@@ -45,12 +45,12 @@ jobs:
     name: version, publish and tag changed charts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # full history and tags, needed to read the latest chart tag
           submodules: true # ci-tools
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: ${{ env.HELM_VERSION }}
 

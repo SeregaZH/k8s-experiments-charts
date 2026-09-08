@@ -39,7 +39,7 @@ jobs:
       charts: ${{ steps.find.outputs.charts }}
       any: ${{ steps.find.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true   # ci-tools
 
@@ -56,11 +56,11 @@ jobs:
       matrix:
         chart: ${{ fromJSON(needs.discover.outputs.charts) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: true   # ci-tools
 
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: ${{ env.HELM_VERSION }}
 
